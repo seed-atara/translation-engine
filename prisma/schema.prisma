@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth ────────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  role      UserRole @default(TRANSLATOR)
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+}
+
+enum UserRole {
+  ADMIN
+  TRANSLATOR
+  EDITOR
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  access_token      String? @db.Text
+  refresh_token     String? @db.Text
+  expires_at        Int?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+// ─── Multi-tenancy ───────────────────────────────────────────────────────────
+
+model Agency {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users   User[]
+  clients Client[]
+}
+
+model Client {
+  id       String @id @default(cuid())
+  name     String
+  slug     String
+  agencyId String
+  agency   Agency @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  // Translation preferences
+  targetLanguages  String[] // ISO 639-1 codes e.g. ["es", "fr", "de"]
+  offensiveFilter  Boolean  @default(true)
+  technicalDomain  String?  // e.g. "healthcare", "finance", "fashion"
+
+  // Stored as JSON blobs for flexibility
+  toneOfVoice      Json?    // { formality, personality, keywords, forbidden_words, examples[] }
+  audienceProfile  Json?    // { demographics, psychographics, language_preferences }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  documents         ClientDocument[]
+  translationJobs   TranslationJob[]
+  translationMemory TranslationMemory[]
+  asanaConfig       AsanaConfig?
+
+  @@unique([agencyId, slug])
+}
+
+// ─── Documents (Anthropic Files API) ─────────────────────────────────────────
+
+model ClientDocument {
+  id              String       @id @default(cuid())
+  clientId        String
+  client          Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name            String
+  type            DocumentType
+  anthropicFileId String       @unique // Files API file_id — reference in agent requests
+  mimeType        String
+  sizeBytes       Int
+  uploadedAt      DateTime     @default(now())
+}
+
+enum DocumentType {
+  BRAND_GUIDELINES
+  TONE_OF_VOICE
+  GLOSSARY
+  REFERENCE_MATERIAL
+  EXAMPLE_COPY
+}
+
+// ─── Translation Jobs ─────────────────────────────────────────────────────────
+
+model TranslationJob {
+  id         String      @id @default(cuid())
+  clientId   String
+  client     Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy  String?     // User ID
+
+  sourceText   String      @db.Text
+  sourceLang   String      // ISO 639-1
+  targetLang   String      // ISO 639-1
+  contentType  ContentType @default(MARKETING_COPY)
+
+  status       JobStatus   @default(PENDING)
+
+  // Pipeline outputs (stored as JSON)
+  idiomAnalysis   Json?   // IdiomAnalysis
+  culturalContext Json?   // CulturalContext
+  translatedText  String? @db.Text
+  safetyFlags     Json?   // SafetyFlag[]
+  confidenceScore Float?  // 0.0 – 1.0
+
+  reviewerNotes   String? @db.Text
+  humanReviewRequired Boolean @default(true)
+
+  // Asana
+  asanaTaskGid  String?
+  asanaPushedAt DateTime?
+
+  // Editor review
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  approvedText String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  segments    TranslationSegment[]
+  corrections EditorCorrection[]
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  FAILED
+  AWAITING_REVIEW
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum ContentType {
+  AD_COPY
+  MARKETING_COPY
+  SOCIAL_MEDIA
+  EMAIL
+  WHITEPAPER
+  TECHNICAL_DOC
+  WEBSITE_COPY
+  PRESS_RELEASE
+}
+
+model TranslationSegment {
+  id             String         @id @default(cuid())
+  jobId          String
+  job            TranslationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  order          Int
+  sourceText     String         @db.Text
+  translatedText String         @db.Text
+  confidenceScore Float
+  culturalNotes  String?        @db.Text
+  safetyFlags    String[]
+}
+
+// ─── Learning System ──────────────────────────────────────────────────────────
+
+model EditorCorrection {
+  id             String         @id @default(cuid())
+  jobId          String
+  job            TranslationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  segmentIndex   Int?
+
+  sourceText     String         @db.Text // Original source text
+  originalTrans  String         @db.Text // What the AI produced
+  correctedTrans String         @db.Text // What the editor changed it to
+  targetLang     String
+  correctionType CorrectionType @default(LANGUAGE)
+  editorNote     String?
+
+  source         CorrectionSource @default(REVIEW_UI) // Where correction came from
+
+  createdAt      DateTime @default(now())
+
+  memoryEntry    TranslationMemory?
+}
+
+enum CorrectionType {
+  LANGUAGE       // Grammar, spelling, fluency
+  CULTURAL       // Cultural adaptation
+  TONE           // Brand tone adjustment
+  TERMINOLOGY    // Domain-specific terms
+  SAFETY         // Content safety issue
+}
+
+enum CorrectionSource {
+  REVIEW_UI      // Made in our editor review interface
+  ASANA_WEBHOOK  // Detected from Asana task edit event
+}
+
+model TranslationMemory {
+  id            String           @id @default(cuid())
+  clientId      String
+  client        Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  correctionId  String?          @unique
+  correction    EditorCorrection? @relation(fields: [correctionId], references: [id])
+
+  sourceLang     String
+  targetLang     String
+  sourcePattern  String           @db.Text // The source text that triggered the correction
+  preferredOutput String          @db.Text // The editor-approved translation
+  correctionType CorrectionType
+
+  weight         Float            @default(1.0) // Increases with repeated patterns
+  useCount       Int              @default(0)   // Times this memory has been injected
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId, targetLang])
+  @@index([clientId, sourceLang, targetLang])
+}
+
+// ─── Asana Integration ────────────────────────────────────────────────────────
+
+model AsanaConfig {
+  id       String @id @default(cuid())
+  clientId String @unique
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  workspaceGid   String
+  projectGid     String
+  accessToken    String @db.Text // Encrypted at application layer
+  webhookGid     String? // Registered webhook GID for cleanup
+  webhookSecret  String // For X-Hook-Secret HMAC validation
+
+  // Custom field GIDs (created once, stored for reuse)
+  sourceLangFieldGid  String?
+  targetLangFieldGid  String?
+  confidenceFieldGid  String?
+  contentTypeFieldGid String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
