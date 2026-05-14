@@ -79,7 +79,7 @@ async function processStoryEvent(storyGid: string, clientId: string, token: stri
     if (data.type !== "comment" || !data.text.includes("CORRECTION:")) return
 
     // Parse correction format: "CORRECTION: [original] → [corrected]"
-    const match = /CORRECTION:\s*\[(.+?)\]\s*→\s*\[(.+?)\]/s.exec(data.text)
+    const match = /CORRECTION:\s*\[([\s\S]+?)\]\s*→\s*\[([\s\S]+?)\]/.exec(data.text)
     if (!match) return
 
     const [, originalTrans, correctedTrans] = match
