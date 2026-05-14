@@ -7,12 +7,12 @@ export const IdiomAnalysisSchema = z.object({
     z.object({
       original: z.string(),
       normalized: z.string(),
-      type: z.enum(["standard", "stretch", "cultural_ref", "slang"]),
+      type: z.string(), // lenient — Claude may vary enum values
       explanation: z.string(),
     })
   ),
   normalizedText: z.string(),
-  hasComplexIdioms: z.boolean(),
+  hasComplexIdioms: z.boolean().optional().default(false),
 })
 
 export const CulturalContextSchema = z.object({

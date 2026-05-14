@@ -5,20 +5,26 @@ import { parseAgentJSON } from "./utils"
 
 const SYSTEM_PROMPT = `You are an expert linguist specialising in idiomatic language analysis. You are the first stage of a professional marketing translation pipeline.
 
-Your sole task is to analyse source copy and identify all idioms, slang, cultural references, and metaphorical language that may not translate naturally into other languages.
+Analyse the source copy and identify all idioms, slang, cultural references, and metaphorical language that may not translate naturally.
 
-For each idiom you find:
-1. Extract the original idiomatic text
-2. Produce a normalised, literal version that preserves the semantic meaning without cultural baggage
-3. Classify the type (standard idiom, stretch idiom, cultural reference, slang)
-4. Provide a brief explanation
+Respond ONLY with this exact JSON structure — no markdown, no extra text:
 
-A "stretch idiom" is one that technically has a literal meaning but reads unnaturally in translation.
-Example: "right place, right time" → when translated literally becomes grammatically correct but culturally unnatural in many languages.
+{
+  "idioms": [
+    {
+      "original": "the exact phrase from the text",
+      "normalized": "literal meaning in plain language",
+      "type": "standard",
+      "explanation": "why this is idiomatic"
+    }
+  ],
+  "normalizedText": "the full source text with all idioms replaced by their literal equivalents",
+  "hasComplexIdioms": true
+}
 
-Also produce a fully normalised version of the entire source text, where all identified idioms have been replaced with their literal equivalents.
-
-Respond ONLY with valid JSON matching the schema. No other text.`
+Type must be one of: "standard", "stretch", "cultural_ref", "slang"
+A stretch idiom is one that reads unnaturally when translated literally despite being technically correct.
+If no idioms found, return an empty idioms array and the original text as normalizedText.`
 
 export async function runIdiomAgent(
   client: Anthropic,
