@@ -49,5 +49,18 @@ Return the JSON analysis.`,
   })
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : ""
-  return parseAgentJSON(text, IdiomAnalysisSchema, "IdiomAgent")
+  const raw = await parseAgentJSON(text, IdiomAnalysisSchema, "IdiomAgent") as Record<string, unknown>
+
+  // Normalize whatever Claude returned into our expected shape
+  const rawIdioms = Array.isArray(raw["idioms"]) ? (raw["idioms"] as Record<string, unknown>[]) : []
+  return {
+    idioms: rawIdioms.map((item) => ({
+      original: String(item["original"] ?? item["phrase"] ?? item["idiom"] ?? item["text"] ?? ""),
+      normalized: String(item["normalized"] ?? item["literal"] ?? item["literalMeaning"] ?? item["meaning"] ?? ""),
+      type: String(item["type"] ?? item["idiomType"] ?? item["category"] ?? "standard"),
+      explanation: String(item["explanation"] ?? item["reason"] ?? item["note"] ?? ""),
+    })),
+    normalizedText: String(raw["normalizedText"] ?? raw["normalized_text"] ?? raw["cleanedText"] ?? ctx.sourceText),
+    hasComplexIdioms: raw["hasComplexIdioms"] === true,
+  }
 }

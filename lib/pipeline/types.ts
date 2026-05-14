@@ -2,18 +2,8 @@ import { z } from "zod"
 
 // ─── Agent Output Schemas ─────────────────────────────────────────────────────
 
-export const IdiomAnalysisSchema = z.object({
-  idioms: z.array(
-    z.object({
-      original: z.string(),
-      normalized: z.string(),
-      type: z.string(), // lenient — Claude may vary enum values
-      explanation: z.string(),
-    })
-  ),
-  normalizedText: z.string(),
-  hasComplexIdioms: z.boolean().optional().default(false),
-})
+// Loose passthrough — normalization done manually in idiom-agent.ts
+export const IdiomAnalysisSchema = z.object({}).passthrough()
 
 export const CulturalContextSchema = z.object({
   locale: z.string(),
@@ -75,7 +65,11 @@ export const QAReportSchema = z.object({
   improvementAreas: z.array(z.string()),
 })
 
-export type IdiomAnalysis = z.infer<typeof IdiomAnalysisSchema>
+export type IdiomAnalysis = {
+  idioms: { original: string; normalized: string; type: string; explanation: string }[]
+  normalizedText: string
+  hasComplexIdioms: boolean
+}
 export type CulturalContext = z.infer<typeof CulturalContextSchema>
 export type TranslationResult = z.infer<typeof TranslationResultSchema>
 export type SafetyCheck = z.infer<typeof SafetyCheckSchema>
