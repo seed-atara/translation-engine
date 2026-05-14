@@ -54,5 +54,20 @@ Return the JSON safety check result.`,
   })
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : ""
-  return parseAgentJSON(text, SafetyCheckSchema, "SafetyAgent")
+  const raw = await parseAgentJSON(text, SafetyCheckSchema, "SafetyAgent") as Record<string, unknown>
+
+  const rawFlags = Array.isArray(raw["flags"]) ? (raw["flags"] as Record<string, unknown>[]) : []
+  const fallbackText = ctx.translationResult?.translatedText ?? ""
+
+  return {
+    passed: raw["passed"] !== false && rawFlags.filter((f) => f["severity"] === "high").length === 0,
+    flags: rawFlags.map((f) => ({
+      text: String(f["text"] ?? f["phrase"] ?? f["content"] ?? ""),
+      reason: String(f["reason"] ?? f["explanation"] ?? ""),
+      severity: String(f["severity"] ?? "low"),
+      suggestion: String(f["suggestion"] ?? f["replacement"] ?? f["alternative"] ?? ""),
+      replaced: f["replaced"] === true,
+    })),
+    cleanedText: String(raw["cleanedText"] ?? raw["cleaned_text"] ?? raw["safeText"] ?? fallbackText),
+  }
 }

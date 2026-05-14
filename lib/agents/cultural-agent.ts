@@ -48,5 +48,34 @@ Return the JSON cultural context analysis.`,
   })
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : ""
-  return parseAgentJSON(text, CulturalContextSchema, "CulturalAgent")
+  const raw = await parseAgentJSON(text, CulturalContextSchema, "CulturalAgent") as Record<string, unknown>
+
+  // Claude may return snake_case, nested objects, or arrays of strings — normalise all variants
+  function toStringArray(val: unknown): string[] {
+    if (!Array.isArray(val)) return []
+    return val.map((v) =>
+      typeof v === "string" ? v : (v as Record<string, unknown>)["note"] ?? (v as Record<string, unknown>)["text"] ?? JSON.stringify(v)
+    ).map(String)
+  }
+
+  function toGlossary(val: unknown): { term: string; localEquivalent: string }[] {
+    if (!Array.isArray(val)) return []
+    return val.map((v) => {
+      const item = v as Record<string, unknown>
+      return {
+        term: String(item["term"] ?? item["source"] ?? ""),
+        localEquivalent: String(item["localEquivalent"] ?? item["local_equivalent"] ?? item["translation"] ?? item["target"] ?? ""),
+      }
+    })
+  }
+
+  return {
+    locale: String(raw["locale"] ?? ctx.targetLang),
+    culturalNotes: toStringArray(raw["culturalNotes"] ?? raw["cultural_notes"] ?? raw["notes"]),
+    currentTrends: toStringArray(raw["currentTrends"] ?? raw["current_trends"] ?? raw["trends"]),
+    avoidPhrases: toStringArray(raw["avoidPhrases"] ?? raw["avoid_phrases"] ?? raw["avoid"] ?? raw["phrases_to_avoid"]),
+    preferredRegister: String(raw["preferredRegister"] ?? raw["preferred_register"] ?? raw["register"] ?? "semi-formal"),
+    glossaryMatches: toGlossary(raw["glossaryMatches"] ?? raw["glossary_matches"] ?? raw["glossary"] ?? []),
+    contentAdaptations: toStringArray(raw["contentAdaptations"] ?? raw["content_adaptations"] ?? raw["adaptations"] ?? []),
+  }
 }

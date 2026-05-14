@@ -2,24 +2,9 @@ import { z } from "zod"
 
 // ─── Agent Output Schemas ─────────────────────────────────────────────────────
 
-// Loose passthrough — normalization done manually in idiom-agent.ts
+// All schemas are loose passthroughs — normalization done in each agent file
 export const IdiomAnalysisSchema = z.object({}).passthrough()
-
-export const CulturalContextSchema = z.object({
-  locale: z.string(),
-  culturalNotes: z.array(z.string()),
-  currentTrends: z.array(z.string()),
-  avoidPhrases: z.array(z.string()),
-  preferredRegister: z.enum(["formal", "semi-formal", "informal", "colloquial"]),
-  glossaryMatches: z.array(
-    z.object({
-      term: z.string(),
-      localEquivalent: z.string(),
-      notes: z.string().optional(),
-    })
-  ),
-  contentAdaptations: z.array(z.string()),
-})
+export const CulturalContextSchema = z.object({}).passthrough()
 
 export const TranslationResultSchema = z.object({
   translatedText: z.string(),
@@ -35,45 +20,39 @@ export const TranslationResultSchema = z.object({
   modelUsed: z.string(),
 })
 
-export const SafetyCheckSchema = z.object({
-  passed: z.boolean(),
-  flags: z.array(
-    z.object({
-      text: z.string(),
-      reason: z.string(),
-      severity: z.enum(["low", "medium", "high"]),
-      suggestion: z.string(),
-      replaced: z.boolean(),
-    })
-  ),
-  cleanedText: z.string(),
-})
+export const SafetyCheckSchema = z.object({}).passthrough()
 
-export const QAReportSchema = z.object({
-  overallScore: z.number().min(0).max(1),
-  segments: z.array(
-    z.object({
-      text: z.string(),
-      score: z.number().min(0).max(1),
-      issues: z.array(z.string()),
-    })
-  ),
-  reviewerNotes: z.string(),
-  humanReviewRequired: z.boolean(),
-  humanReviewPriority: z.enum(["low", "medium", "high"]),
-  strengthAreas: z.array(z.string()),
-  improvementAreas: z.array(z.string()),
-})
+export const QAReportSchema = z.object({}).passthrough()
 
 export type IdiomAnalysis = {
   idioms: { original: string; normalized: string; type: string; explanation: string }[]
   normalizedText: string
   hasComplexIdioms: boolean
 }
-export type CulturalContext = z.infer<typeof CulturalContextSchema>
+export type CulturalContext = {
+  locale: string
+  culturalNotes: string[]
+  currentTrends: string[]
+  avoidPhrases: string[]
+  preferredRegister: string
+  glossaryMatches: { term: string; localEquivalent: string }[]
+  contentAdaptations: string[]
+}
 export type TranslationResult = z.infer<typeof TranslationResultSchema>
-export type SafetyCheck = z.infer<typeof SafetyCheckSchema>
-export type QAReport = z.infer<typeof QAReportSchema>
+export type SafetyCheck = {
+  passed: boolean
+  flags: { text: string; reason: string; severity: string; suggestion: string; replaced: boolean }[]
+  cleanedText: string
+}
+export type QAReport = {
+  overallScore: number
+  segments: { text: string; score: number; issues: string[] }[]
+  reviewerNotes: string
+  humanReviewRequired: boolean
+  humanReviewPriority: "low" | "medium" | "high"
+  strengthAreas: string[]
+  improvementAreas: string[]
+}
 
 // ─── Pipeline I/O ─────────────────────────────────────────────────────────────
 

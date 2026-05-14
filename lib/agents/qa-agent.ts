@@ -57,5 +57,30 @@ Return the JSON QA report.`,
   })
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : ""
-  return parseAgentJSON(text, QAReportSchema, "QAAgent")
+  const raw = await parseAgentJSON(text, QAReportSchema, "QAAgent") as Record<string, unknown>
+
+  function toStringArray(val: unknown): string[] {
+    if (!Array.isArray(val)) return []
+    return val.map((v) => typeof v === "string" ? v : JSON.stringify(v))
+  }
+
+  const rawSegments = Array.isArray(raw["segments"]) ? (raw["segments"] as Record<string, unknown>[]) : []
+  const score = Number(raw["overallScore"] ?? raw["overall_score"] ?? raw["score"] ?? 0.75)
+  const priority = (["low", "medium", "high"].includes(String(raw["humanReviewPriority"] ?? raw["human_review_priority"] ?? "medium"))
+    ? String(raw["humanReviewPriority"] ?? raw["human_review_priority"] ?? "medium")
+    : "medium") as "low" | "medium" | "high"
+
+  return {
+    overallScore: Math.min(1, Math.max(0, score)),
+    segments: rawSegments.map((s) => ({
+      text: String(s["text"] ?? s["segment"] ?? ""),
+      score: Math.min(1, Math.max(0, Number(s["score"] ?? s["confidence"] ?? 0.75))),
+      issues: toStringArray(s["issues"] ?? s["problems"] ?? []),
+    })),
+    reviewerNotes: String(raw["reviewerNotes"] ?? raw["reviewer_notes"] ?? raw["notes"] ?? "Review complete."),
+    humanReviewRequired: raw["humanReviewRequired"] !== false && raw["human_review_required"] !== false && score < 0.9,
+    humanReviewPriority: priority,
+    strengthAreas: toStringArray(raw["strengthAreas"] ?? raw["strength_areas"] ?? raw["strengths"] ?? []),
+    improvementAreas: toStringArray(raw["improvementAreas"] ?? raw["improvement_areas"] ?? raw["improvements"] ?? []),
+  }
 }
