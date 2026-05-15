@@ -22,7 +22,20 @@ Score confidence 0.0–1.0 per segment:
 - 0.5–0.7: Acceptable but may benefit from native review
 - Below 0.5: Significant ambiguity, human review essential
 
-Respond ONLY with valid JSON matching the schema. No other text.`
+Respond ONLY with this exact JSON structure — no markdown, no extra text:
+
+{
+  "translatedText": "the complete translation as a single string with paragraphs separated by newlines",
+  "segments": [
+    {
+      "source": "source segment text",
+      "translated": "translated segment text",
+      "confidence": 0.95,
+      "notes": "optional note"
+    }
+  ],
+  "overallConfidence": 0.92
+}`
 }
 
 function buildUserMessage(ctx: PipelineContext): string {
@@ -110,18 +123,22 @@ export async function runTranslationAgent(
 
   const rawSegments = Array.isArray(raw["segments"]) ? (raw["segments"] as Record<string, unknown>[]) : []
 
+  const segments = rawSegments.map((s) => ({
+    source: String(s["source"] ?? s["original"] ?? s["sourceText"] ?? s["source_text"] ?? ""),
+    translated: String(s["translated"] ?? s["translation"] ?? s["target"] ?? s["targetText"] ?? s["target_text"] ?? ""),
+    confidence: Math.min(1, Math.max(0, Number(s["confidence"] ?? s["score"] ?? 0.75))),
+    notes: s["notes"] != null ? String(s["notes"]) : s["note"] != null ? String(s["note"]) : undefined,
+  }))
+
+  // Try all known field names, then reconstruct from segments as last resort
   const translatedText = String(
-    raw["translatedText"] ?? raw["translated_text"] ?? raw["translation"] ?? raw["output"] ?? ""
-  )
+    raw["translatedText"] ?? raw["translated_text"] ?? raw["translation"] ??
+    raw["output"] ?? raw["text"] ?? raw["result"] ?? raw["targetText"] ?? raw["target_text"] ?? ""
+  ) || segments.map((s) => s.translated).filter(Boolean).join("\n\n")
 
   return {
     translatedText,
-    segments: rawSegments.map((s) => ({
-      source: String(s["source"] ?? s["original"] ?? s["sourceText"] ?? s["source_text"] ?? ""),
-      translated: String(s["translated"] ?? s["translation"] ?? s["target"] ?? s["targetText"] ?? ""),
-      confidence: Math.min(1, Math.max(0, Number(s["confidence"] ?? s["score"] ?? 0.75))),
-      notes: s["notes"] != null ? String(s["notes"]) : s["note"] != null ? String(s["note"]) : undefined,
-    })),
+    segments,
     overallConfidence: Math.min(1, Math.max(0, Number(
       raw["overallConfidence"] ?? raw["overall_confidence"] ?? raw["confidence"] ?? 0.75
     ))),

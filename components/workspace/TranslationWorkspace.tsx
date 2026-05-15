@@ -1,11 +1,17 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
-import { Send, Globe, FileText, AlertTriangle, ChevronDown } from "lucide-react"
+import { Send, Globe, FileText, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react"
 import { AgentProgress } from "./AgentProgress"
 import { ConfidenceScore } from "./ConfidenceScore"
 import { cn } from "@/lib/utils"
-import type { PipelineEvent, PipelineStage, PipelineResult } from "@/lib/pipeline/types"
+import type {
+  PipelineEvent,
+  PipelineStage,
+  PipelineResult,
+  IdiomAnalysis,
+  CulturalContext,
+} from "@/lib/pipeline/types"
 
 const LANGUAGES = [
   { code: "es", label: "Spanish" },
@@ -39,6 +45,27 @@ interface TranslationWorkspaceProps {
   clientName: string
 }
 
+interface StageData {
+  idiom?: IdiomAnalysis
+  cultural?: CulturalContext
+}
+
+function Expandable({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="border border-zinc-800 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-zinc-400 uppercase tracking-wider hover:bg-zinc-800/40 transition-colors"
+      >
+        {label}
+        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+      </button>
+      {open && <div className="px-4 pb-4 pt-1">{children}</div>}
+    </div>
+  )
+}
+
 export function TranslationWorkspace({ clientId, clientName }: TranslationWorkspaceProps) {
   const [sourceText, setSourceText] = useState("")
   const [targetLang, setTargetLang] = useState("es")
@@ -46,6 +73,7 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
   const [isRunning, setIsRunning] = useState(false)
   const [activeStage, setActiveStage] = useState<PipelineStage | null>(null)
   const [completedStages, setCompletedStages] = useState<PipelineStage[]>([])
+  const [stageData, setStageData] = useState<StageData>({})
   const [result, setResult] = useState<PipelineResult | null>(null)
   const [error, setError] = useState<string | undefined>()
   const abortRef = useRef<AbortController | null>(null)
@@ -56,6 +84,7 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
     setIsRunning(true)
     setActiveStage(null)
     setCompletedStages([])
+    setStageData({})
     setResult(null)
     setError(undefined)
 
@@ -99,8 +128,15 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
           } else if (event.status === "running") {
             setActiveStage(event.stage as PipelineStage)
           } else if (event.status === "complete") {
-            setCompletedStages((prev) => [...prev, event.stage as PipelineStage])
+            const stage = event.stage as PipelineStage
+            setCompletedStages((prev) => [...prev, stage])
             setActiveStage(null)
+            // Capture stage-specific data for display
+            if (stage === "idiom") {
+              setStageData((prev) => ({ ...prev, idiom: event.data as IdiomAnalysis }))
+            } else if (stage === "cultural") {
+              setStageData((prev) => ({ ...prev, cultural: event.data as CulturalContext }))
+            }
           }
         }
       }
@@ -117,7 +153,6 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
     <div className="flex h-full gap-5">
       {/* Left: Input + Controls */}
       <div className="flex flex-col flex-1 min-w-0 gap-4">
-        {/* Header row */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 surface px-3 py-1.5">
             <Globe className="h-3.5 w-3.5 text-muted-foreground" />
@@ -154,7 +189,6 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
           </div>
         </div>
 
-        {/* Source text */}
         <div className="surface flex-1 relative overflow-hidden">
           <textarea
             value={sourceText}
@@ -168,7 +202,6 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
           </div>
         </div>
 
-        {/* Translate button */}
         <button
           onClick={runTranslation}
           disabled={!sourceText.trim() || isRunning}
@@ -184,58 +217,114 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
         </button>
       </div>
 
-      {/* Center: Agent progress */}
-      <div className="w-52 shrink-0">
+      {/* Center: Agent progress + stage details */}
+      <div className="w-56 shrink-0 flex flex-col gap-4">
         <AgentProgress
           activeStage={activeStage}
           completedStages={completedStages}
           error={error}
         />
+
+        {/* Idiom analysis detail */}
+        {stageData.idiom && (
+          <Expandable label={`Idioms (${stageData.idiom.idioms.length})`}>
+            {stageData.idiom.idioms.length === 0 ? (
+              <p className="text-xs text-zinc-600">No idioms found</p>
+            ) : (
+              <div className="space-y-2">
+                {stageData.idiom.idioms.map((idiom, i) => (
+                  <div key={i} className="space-y-0.5">
+                    <p className="text-xs text-zinc-300 font-medium">"{idiom.original}"</p>
+                    <p className="text-xs text-zinc-500">→ {idiom.normalized}</p>
+                    <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500">
+                      {idiom.type}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Expandable>
+        )}
+
+        {/* Cultural context detail */}
+        {stageData.cultural && (
+          <Expandable label={`Cultural (${stageData.cultural.culturalNotes.length} notes)`}>
+            <div className="space-y-3">
+              <div>
+                <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Register</p>
+                <p className="text-xs text-indigo-400">{stageData.cultural.preferredRegister}</p>
+              </div>
+              {stageData.cultural.avoidPhrases.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Avoid</p>
+                  <div className="flex flex-wrap gap-1">
+                    {stageData.cultural.avoidPhrases.slice(0, 4).map((p, i) => (
+                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-900">
+                        {p}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {stageData.cultural.glossaryMatches.length > 0 && (
+                <div>
+                  <p className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1">Glossary</p>
+                  <div className="space-y-0.5">
+                    {stageData.cultural.glossaryMatches.map((g, i) => (
+                      <p key={i} className="text-[10px] text-zinc-500">
+                        <span className="text-zinc-400">{g.term}</span> → {g.localEquivalent}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Expandable>
+        )}
       </div>
 
       {/* Right: Output */}
-      <div className="flex flex-col flex-1 min-w-0 gap-4">
+      <div className="flex flex-col flex-1 min-w-0 gap-4 overflow-y-auto">
         {result ? (
           <>
             <ConfidenceScore score={result.confidenceScore} />
 
-            <div className="surface flex-1 overflow-y-auto p-4">
+            <div className="surface flex-1 p-4 min-h-[200px]">
               <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-                {result.translatedText}
+                {result.translatedText || (
+                  <span className="text-zinc-600 italic">No translation returned — check pipeline logs</span>
+                )}
               </p>
             </div>
 
             {/* Cultural adaptations */}
             {result.culturalAdaptations.length > 0 && (
-              <div className="surface p-4 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Cultural Adaptations
-                </p>
-                <ul className="space-y-1">
+              <Expandable label={`Cultural Adaptations (${result.culturalAdaptations.length})`}>
+                <ul className="space-y-2">
                   {result.culturalAdaptations.map((note, i) => (
-                    <li key={i} className="text-xs text-muted-foreground flex gap-2">
-                      <span className="text-primary mt-0.5">·</span>
+                    <li key={i} className="text-xs text-zinc-400 flex gap-2 leading-relaxed">
+                      <span className="text-indigo-500 mt-0.5 shrink-0">·</span>
                       {note}
                     </li>
                   ))}
                 </ul>
-              </div>
+              </Expandable>
             )}
 
             {/* Safety flags */}
             {result.safetyFlags.length > 0 && (
-              <div className="surface border-warning/20 p-4 space-y-2">
+              <div className="surface p-4 space-y-2 border border-amber-900/40">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-                  <p className="text-xs font-medium text-warning uppercase tracking-wider">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                  <p className="text-xs font-medium text-amber-400 uppercase tracking-wider">
                     Safety Flags ({result.safetyFlags.length})
                   </p>
                 </div>
                 {result.safetyFlags.map((flag, i) => (
-                  <div key={i} className="text-xs space-y-0.5">
-                    <p className="text-foreground line-through opacity-50">{flag.text}</p>
-                    <p className="text-success">→ {flag.suggestion}</p>
-                    <p className="text-muted-foreground">{flag.reason}</p>
+                  <div key={i} className="text-xs space-y-0.5 pl-2 border-l border-amber-900">
+                    <p className="text-zinc-500 line-through">{flag.text}</p>
+                    <p className="text-emerald-400">→ {flag.suggestion}</p>
+                    <p className="text-zinc-500">{flag.reason}</p>
                   </div>
                 ))}
               </div>
@@ -243,23 +332,16 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
 
             {/* Reviewer notes */}
             {result.reviewerNotes && (
-              <div className="surface p-4">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  Reviewer Notes
-                </p>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {result.reviewerNotes}
-                </p>
-              </div>
+              <Expandable label="Reviewer Notes">
+                <p className="text-xs text-zinc-400 leading-relaxed">{result.reviewerNotes}</p>
+              </Expandable>
             )}
           </>
         ) : (
-          <div className="surface flex-1 flex items-center justify-center">
+          <div className="surface flex-1 flex items-center justify-center min-h-[200px]">
             <div className="text-center space-y-2">
-              <Globe className="h-8 w-8 text-border mx-auto" />
-              <p className="text-sm text-muted-foreground">
-                Translation will appear here
-              </p>
+              <Globe className="h-8 w-8 text-zinc-800 mx-auto" />
+              <p className="text-sm text-zinc-600">Translation will appear here</p>
             </div>
           </div>
         )}
