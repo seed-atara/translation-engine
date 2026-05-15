@@ -37,7 +37,7 @@ export default function NewClientPage() {
     const form = new FormData(e.currentTarget)
     const body = {
       name: form.get("name") as string,
-      industry: form.get("industry") as string,
+      technicalDomain: form.get("technicalDomain") as string,
       targetLanguages: selectedLangs,
       toneOfVoice: form.get("toneDescription")
         ? { description: form.get("toneDescription") as string }
@@ -102,7 +102,7 @@ export default function NewClientPage() {
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Industry</label>
           <input
-            name="industry"
+            name="technicalDomain"
             placeholder="e.g. Fashion, Technology, Financial Services"
             className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors"
           />

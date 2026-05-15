@@ -64,8 +64,8 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             </div>
             <div>
               <h1 className="text-2xl font-semibold text-zinc-100">{client.name}</h1>
-              {client.industry && (
-                <p className="text-sm text-zinc-500 mt-0.5">{client.industry}</p>
+              {client.technicalDomain && (
+                <p className="text-sm text-zinc-500 mt-0.5">{client.technicalDomain}</p>
               )}
             </div>
           </div>

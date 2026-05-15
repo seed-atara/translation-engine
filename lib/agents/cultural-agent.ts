@@ -30,7 +30,7 @@ export async function runCulturalAgent(
 
   const response = await client.messages.create({
     model: MODELS.SONNET,
-    max_tokens: 2048,
+    max_tokens: 4096,
     system: SYSTEM_PROMPT,
     messages: [
       {
