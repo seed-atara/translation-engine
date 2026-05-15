@@ -6,19 +6,7 @@ import { z } from "zod"
 export const IdiomAnalysisSchema = z.object({}).passthrough()
 export const CulturalContextSchema = z.object({}).passthrough()
 
-export const TranslationResultSchema = z.object({
-  translatedText: z.string(),
-  segments: z.array(
-    z.object({
-      source: z.string(),
-      translated: z.string(),
-      confidence: z.number().min(0).max(1),
-      notes: z.string().optional(),
-    })
-  ),
-  overallConfidence: z.number().min(0).max(1),
-  modelUsed: z.string(),
-})
+export const TranslationResultSchema = z.object({}).passthrough()
 
 export const SafetyCheckSchema = z.object({}).passthrough()
 
@@ -38,7 +26,12 @@ export type CulturalContext = {
   glossaryMatches: { term: string; localEquivalent: string }[]
   contentAdaptations: string[]
 }
-export type TranslationResult = z.infer<typeof TranslationResultSchema>
+export type TranslationResult = {
+  translatedText: string
+  segments: { source: string; translated: string; confidence: number; notes?: string }[]
+  overallConfidence: number
+  modelUsed: string
+}
 export type SafetyCheck = {
   passed: boolean
   flags: { text: string; reason: string; severity: string; suggestion: string; replaced: boolean }[]

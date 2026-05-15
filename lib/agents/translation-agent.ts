@@ -2,6 +2,7 @@ import type Anthropic from "@anthropic-ai/sdk"
 import { TranslationResultSchema, type TranslationResult, type PipelineContext } from "../pipeline/types"
 import { parseAgentJSON } from "./utils"
 
+
 function buildSystemPrompt(ctx: PipelineContext): string {
   return `You are an elite marketing translator and copywriter with native-level fluency in ${ctx.targetLang} and deep expertise in contemporary ${ctx.targetLang} consumer culture, audience psychology, and brand communication.
 
@@ -105,7 +106,25 @@ export async function runTranslationAgent(
   })
 
   const text = response.content[0]?.type === "text" ? response.content[0].text : ""
-  const result = await parseAgentJSON(text, TranslationResultSchema, "TranslationAgent")
+  const raw = await parseAgentJSON(text, TranslationResultSchema, "TranslationAgent") as Record<string, unknown>
 
-  return { ...result, modelUsed: model }
+  const rawSegments = Array.isArray(raw["segments"]) ? (raw["segments"] as Record<string, unknown>[]) : []
+
+  const translatedText = String(
+    raw["translatedText"] ?? raw["translated_text"] ?? raw["translation"] ?? raw["output"] ?? ""
+  )
+
+  return {
+    translatedText,
+    segments: rawSegments.map((s) => ({
+      source: String(s["source"] ?? s["original"] ?? s["sourceText"] ?? s["source_text"] ?? ""),
+      translated: String(s["translated"] ?? s["translation"] ?? s["target"] ?? s["targetText"] ?? ""),
+      confidence: Math.min(1, Math.max(0, Number(s["confidence"] ?? s["score"] ?? 0.75))),
+      notes: s["notes"] != null ? String(s["notes"]) : s["note"] != null ? String(s["note"]) : undefined,
+    })),
+    overallConfidence: Math.min(1, Math.max(0, Number(
+      raw["overallConfidence"] ?? raw["overall_confidence"] ?? raw["confidence"] ?? 0.75
+    ))),
+    modelUsed: model,
+  }
 }
