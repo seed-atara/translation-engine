@@ -17,7 +17,7 @@ export default async function AnalyticsPage() {
       by: ["sourceLang", "targetLang"],
       where: agency ? { client: { agencyId: agency.id } } : {},
       _count: { _all: true },
-      orderBy: { _count: { _all: "desc" } },
+      orderBy: { _count: { id: "desc" } },
       take: 8,
     }),
     db.translationJob.findMany({
