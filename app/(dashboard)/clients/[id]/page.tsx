@@ -1,7 +1,8 @@
 import { db } from "@/lib/db/client"
 import { notFound } from "next/navigation"
-import { Globe, FileText, ArrowLeft, Clock } from "lucide-react"
+import { Globe, FileText, ArrowLeft, Clock, Settings, Layers } from "lucide-react"
 import Link from "next/link"
+import { DocumentUpload } from "@/components/clients/DocumentUpload"
 
 export const dynamic = "force-dynamic"
 
@@ -23,6 +24,9 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
           confidenceScore: true,
           createdAt: true,
         },
+      },
+      documents: {
+        orderBy: { uploadedAt: "desc" },
       },
       _count: { select: { translationJobs: true, documents: true } },
     },
@@ -70,13 +74,30 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          <Link
-            href={`/translate/${client.id}`}
-            className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            <FileText className="h-4 w-4" />
-            New translation
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/clients/${client.id}/asana`}
+              className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              title="Asana integration"
+            >
+              <Layers className="h-4 w-4" />
+              Asana
+            </Link>
+            <Link
+              href={`/clients/${client.id}/settings`}
+              className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              title="Client settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Link>
+            <Link
+              href={`/translate/${client.id}`}
+              className="flex items-center gap-2 bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <FileText className="h-4 w-4" />
+              New translation
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -97,6 +118,16 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
               : "—"}
           </p>
           <p className="text-xs text-zinc-500 mt-1">Target languages</p>
+        </div>
+      </div>
+
+      {/* Documents */}
+      <div>
+        <h2 className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-4">
+          Reference Documents
+        </h2>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <DocumentUpload clientId={client.id} initialDocuments={client.documents} />
         </div>
       </div>
 

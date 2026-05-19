@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useCallback, useRef } from "react"
-import { Send, Globe, FileText, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react"
+import { Send, Globe, FileText, AlertTriangle, ChevronDown, ChevronRight, ArrowRight, ExternalLink, Loader2 } from "lucide-react"
+import Link from "next/link"
 import { AgentProgress } from "./AgentProgress"
 import { ConfidenceScore } from "./ConfidenceScore"
 import { cn } from "@/lib/utils"
@@ -50,6 +51,12 @@ interface StageData {
   cultural?: CulturalContext
 }
 
+type AsanaPushState =
+  | { status: "idle" }
+  | { status: "pushing" }
+  | { status: "success"; taskUrl: string }
+  | { status: "error"; message: string; setupUrl?: string }
+
 function Expandable({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
@@ -75,7 +82,9 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
   const [completedStages, setCompletedStages] = useState<PipelineStage[]>([])
   const [stageData, setStageData] = useState<StageData>({})
   const [result, setResult] = useState<PipelineResult | null>(null)
+  const [savedJobId, setSavedJobId] = useState<string | null>(null)
   const [error, setError] = useState<string | undefined>()
+  const [asanaPush, setAsanaPush] = useState<AsanaPushState>({ status: "idle" })
   const abortRef = useRef<AbortController | null>(null)
 
   const runTranslation = useCallback(async () => {
@@ -86,7 +95,9 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
     setCompletedStages([])
     setStageData({})
     setResult(null)
+    setSavedJobId(null)
     setError(undefined)
+    setAsanaPush({ status: "idle" })
 
     abortRef.current = new AbortController()
 
@@ -118,24 +129,31 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue
-          const event: PipelineEvent = JSON.parse(line.slice(6))
+          const event = JSON.parse(line.slice(6)) as PipelineEvent | { stage: "saved"; jobId: string }
 
-          if (event.stage === "error") {
-            setError(event.error)
+          if (event.stage === "saved") {
+            setSavedJobId((event as { stage: "saved"; jobId: string }).jobId)
+          } else if (event.stage === "error") {
+            setError((event as { stage: "error"; error: string }).error)
           } else if (event.stage === "complete") {
-            setResult(event.result)
+            setResult((event as { stage: "complete"; result: PipelineResult }).result)
             setActiveStage(null)
-          } else if (event.status === "running") {
+          } else if ("status" in event && event.status === "running") {
             setActiveStage(event.stage as PipelineStage)
-          } else if (event.status === "complete") {
+          } else if ("status" in event && event.status === "complete") {
             const stage = event.stage as PipelineStage
             setCompletedStages((prev) => [...prev, stage])
             setActiveStage(null)
-            // Capture stage-specific data for display
             if (stage === "idiom") {
-              setStageData((prev) => ({ ...prev, idiom: event.data as IdiomAnalysis }))
+              setStageData((prev) => ({
+                ...prev,
+                idiom: (event as { stage: PipelineStage; status: "complete"; data: unknown }).data as IdiomAnalysis,
+              }))
             } else if (stage === "cultural") {
-              setStageData((prev) => ({ ...prev, cultural: event.data as CulturalContext }))
+              setStageData((prev) => ({
+                ...prev,
+                cultural: (event as { stage: PipelineStage; status: "complete"; data: unknown }).data as CulturalContext,
+              }))
             }
           }
         }
@@ -148,6 +166,30 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
       setIsRunning(false)
     }
   }, [sourceText, targetLang, contentType, clientId, isRunning])
+
+  const pushToAsana = useCallback(async () => {
+    if (!savedJobId) return
+    setAsanaPush({ status: "pushing" })
+    try {
+      const res = await fetch(`/api/jobs/${savedJobId}/asana-push`, { method: "POST" })
+      const data = (await res.json()) as {
+        taskUrl?: string
+        error?: string
+        setupUrl?: string
+      }
+      if (!res.ok) {
+        setAsanaPush({
+          status: "error",
+          message: data.error ?? "Push failed",
+          setupUrl: data.setupUrl,
+        })
+        return
+      }
+      setAsanaPush({ status: "success", taskUrl: data.taskUrl! })
+    } catch {
+      setAsanaPush({ status: "error", message: "Network error. Please try again." })
+    }
+  }, [savedJobId])
 
   return (
     <div className="flex h-full gap-5">
@@ -287,7 +329,18 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
       <div className="flex flex-col flex-1 min-w-0 gap-4 overflow-y-auto">
         {result ? (
           <>
-            <ConfidenceScore score={result.confidenceScore} />
+            <div className="flex items-center justify-between">
+              <ConfidenceScore score={result.confidenceScore} />
+              {savedJobId && (
+                <Link
+                  href={`/review/${savedJobId}`}
+                  className="flex items-center gap-1.5 text-sm font-medium text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  Review translation
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              )}
+            </div>
 
             <div className="surface flex-1 p-4 min-h-[200px]">
               <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
@@ -296,6 +349,51 @@ export function TranslationWorkspace({ clientId, clientName }: TranslationWorksp
                 )}
               </p>
             </div>
+
+            {/* Asana push button */}
+            {savedJobId && (
+              <div className="flex items-center gap-3">
+                {asanaPush.status === "success" ? (
+                  <a
+                    href={asanaPush.taskUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm px-4 py-2 rounded-lg transition-colors"
+                  >
+                    View in Asana
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                ) : asanaPush.status === "error" && asanaPush.setupUrl ? (
+                  <Link
+                    href={asanaPush.setupUrl}
+                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm px-4 py-2 rounded-lg transition-colors"
+                  >
+                    Configure Asana →
+                  </Link>
+                ) : (
+                  <button
+                    onClick={pushToAsana}
+                    disabled={asanaPush.status === "pushing"}
+                    className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 text-sm px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {asanaPush.status === "pushing" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Pushing…
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        Push to Asana
+                      </>
+                    )}
+                  </button>
+                )}
+                {asanaPush.status === "error" && !asanaPush.setupUrl && (
+                  <p className="text-xs text-red-400">{asanaPush.message}</p>
+                )}
+              </div>
+            )}
 
             {/* Cultural adaptations */}
             {result.culturalAdaptations.length > 0 && (
